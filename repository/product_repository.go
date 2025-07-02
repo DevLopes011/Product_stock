@@ -3,6 +3,7 @@ package repository
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"product_stock/model"
 )
 
@@ -35,28 +36,27 @@ func (pr *ProductRepository) CreateProduct(product model.Product) (int, error) {
 }
 
 func (pr *ProductRepository) GetProducts() ([]model.Product, error) {
+	log.Println("Entrou no repository ")
 	query := "SELECT id, product_name, price FROM product"
 	rows, err := pr.connection.Query(query)
 	if err != nil {
 		fmt.Println(err)
 		return []model.Product{}, err
 	}
+	defer rows.Close()
 
 	var productList []model.Product
-	var productObj model.Product
 
 	for rows.Next() {
-		err = rows.Scan(
-			&productObj.ID,
-			&productObj.Name,
-			productObj.Price)
+		var p model.Product
+		err = rows.Scan(&p.ID, &p.Name, &p.Price)
 		if err != nil {
 			fmt.Println(err)
 			return []model.Product{}, err
 		}
-		productList = append(productList, productObj)
+		productList = append(productList, p)
 	}
-	rows.Close()
+
 	return productList, nil
 }
 
@@ -81,5 +81,50 @@ func (pr *ProductRepository) GetProductById(id_product int) (*model.Product, err
 
 	query.Close()
 	return &produto, nil
+}
+
+func (pr *ProductRepository) UpdateProduct(product model.Product) (*model.Product, error) {
+	log.Println("Entrou no repository update")
+
+	query := `UPDATE product
+	SET product_name = $1, price = $2
+	WHERE id = $3
+	RETURNING id, product_name, price
+	`
+
+	row := pr.connection.QueryRow(query, product.Name, product.Price, product.ID)
+
+	var UpdateProduct model.Product
+
+	err := row.Scan(&UpdateProduct.ID, &UpdateProduct.Name, &UpdateProduct.Price)
+	if err != nil {
+		log.Printf("Erro ao fazer update: %v", err)
+		return nil, err
+	}
+	log.Printf("Update concluido com sucesso")
+	return &UpdateProduct, nil
+}
+
+func (pr *ProductRepository) DeleteProduct(id int) error {
+	query := `DELETE FROM product WHERE id = $1`
+
+	res, err := pr.connection.Exec(query, id)
+	if err != nil {
+		log.Printf("Erro ao deletar produto ID %d: %v", id, err)
+		return err
+	}
+
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		log.Printf("Erro ao verificar linhas afetadas: %v", err)
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("produto com ID %d não encontrado", id)
+	}
+
+	log.Printf("Produto ID %d deletado com sucesso", id)
+	return nil
 
 }
